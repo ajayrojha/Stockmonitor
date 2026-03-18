@@ -21,9 +21,11 @@ export const PriceChart = ({ data }: PriceChartProps) => {
           <XAxis 
             dataKey="timestamp" 
             stroke="var(--text-secondary)" 
-            fontSize={12} 
+            fontSize={10} 
             tickLine={false}
             axisLine={false}
+            interval={600} // Show tick every 10 minutes (600 seconds)
+            minTickGap={30}
           />
           <YAxis 
             domain={['auto', 'auto']} 
