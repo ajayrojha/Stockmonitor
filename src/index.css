@@ -7,8 +7,10 @@
   --text-primary: #ffffff;
   --text-secondary: #94a3b8;
   
-  --accent-primary: #3b82f6;
-  --accent-secondary: #8b5cf6;
+  /* Electric cyan / amber — a HUD-terminal pairing instead of the generic
+     blue→purple gradient most AI-generated dashboards default to. */
+  --accent-primary: #22d3ee;
+  --accent-secondary: #fbbf24;
   
   --success: #10b981;
   --success-glow: rgba(16, 185, 129, 0.2);
@@ -17,8 +19,8 @@
   --warning: #f59e0b;
   
   --glass-bg: rgba(255, 255, 255, 0.03);
-  --glass-border: rgba(255, 255, 255, 0.1);
-  --glass-blur: blur(12px);
+  --glass-border: rgba(148, 197, 210, 0.14);
+  --glass-blur: blur(9px);
   
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
@@ -39,8 +41,49 @@ body {
   display: flex;
   min-width: 320px;
   min-height: 100vh;
-  background: radial-gradient(circle at top right, #1e1b4b, #05070a);
+  position: relative;
+  overflow-x: hidden;
+  background-color: var(--bg-color);
+  /* Faint schematic grid — a HUD/terminal cue instead of a soft AI-blob glow. */
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
+  background-size: 44px 44px, 44px 44px;
   background-attachment: fixed;
+}
+
+/* Ambient glow layer — cyan/amber pools instead of one centered purple blob,
+   drifting slowly so the background reads as alive without being loud. */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(circle at 12% 15%, rgba(34, 211, 238, 0.16), transparent 42%),
+    radial-gradient(circle at 88% 85%, rgba(251, 191, 36, 0.09), transparent 46%),
+    radial-gradient(circle at 50% 105%, rgba(34, 211, 238, 0.06), transparent 60%);
+  animation: ambient-drift 18s ease-in-out infinite;
+}
+
+/* Vignette to pull focus toward the center content. */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 45%, rgba(0, 0, 0, 0.5) 100%);
+}
+
+@keyframes ambient-drift {
+  0%, 100% { opacity: 0.85; transform: scale(1) translate3d(0, 0, 0); }
+  50%      { opacity: 1;    transform: scale(1.04) translate3d(-1%, 1%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none; }
 }
 
 #root {
@@ -63,7 +106,7 @@ body {
   -webkit-backdrop-filter: var(--glass-blur);
   border: 1px solid var(--border-color);
   border-radius: 20px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(148, 197, 210, 0.06);
 }
 
 /* Typography */
@@ -73,8 +116,9 @@ h1, h2, h3 {
 }
 
 .text-gradient {
-  background: linear-gradient(135deg, #fff 0%, #94a3b8 100%);
+  background: linear-gradient(135deg, #fff 0%, var(--accent-primary) 70%, #94a3b8 100%);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
@@ -110,19 +154,8 @@ h1, h2, h3 {
 
 /* Specific Responsive Adjustments */
 @media (max-width: 768px) {
-  header {
-    flex-direction: column;
-    align-items: flex-start !important;
-    gap: 1.5rem;
-    margin-bottom: 2rem !important;
-  }
-  
-  h1.text-gradient {
-    font-size: 2.5rem !important;
-  }
-  
   .glass-card {
-    padding: 1.25rem !important;
+    padding: 1rem !important;
   }
 }
 
@@ -141,3 +174,10 @@ h1, h2, h3 {
 
 .pulse-success { animation: pulse-success 2s infinite; }
 .pulse-danger { animation: pulse-danger 2s infinite; }
+
+@keyframes pulse-bg {
+  0% { opacity: 0.3; }
+  50% { opacity: 0.7; }
+  100% { opacity: 0.3; }
+}
+.pulse-bg { animation: pulse-bg 1.5s infinite ease-in-out; }
