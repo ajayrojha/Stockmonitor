@@ -58,6 +58,34 @@ export const Dashboard = () => {
   const sentimentType = consensus === 'BULLISH' ? 'BUY_CALL' : consensus === 'BEARISH' ? 'BUY_PUT' : 'HOLD';
   const sentimentStrength = predictionSuite.confidence || 50;
 
+  // One-word headline sentiment + a one-line reason, built from the same 4
+  // distinct signals/`consensus` above — no separate logic, so this can't
+  // drift from what the rest of the dashboard is already showing.
+  const todaySentimentWord = consensus === 'BULLISH' ? 'Bullish' : consensus === 'BEARISH' ? 'Bearish' : 'Neutral';
+  const shortEngineLabel = (engine: string) => engine.replace(' Engine (10m)', '').replace(' Engine', '');
+  const bullishDrivers = allSignals.filter(s => s.type === 'BUY_CALL').map(s => shortEngineLabel(s.engine));
+  const bearishDrivers = allSignals.filter(s => s.type === 'BUY_PUT').map(s => shortEngineLabel(s.engine));
+  const todaySentimentReason =
+    consensus === 'BULLISH' ? `${callCount} of ${allSignals.length} engines lean bullish — ${bullishDrivers.join(', ')}.` :
+    consensus === 'BEARISH' ? `${putCount} of ${allSignals.length} engines lean bearish — ${bearishDrivers.join(', ')}.` :
+    `Signals split ${callCount}-${putCount} across ${allSignals.length} engines — no clear majority.`;
+
+  // Countdown to the next data refresh feeding the verdict above. Tied to
+  // predictionSuite.lastUpdated (set each time useMarketData actually commits
+  // a fresh poll) rather than a decorative fixed timer, so it reflects real
+  // refresh cadence — matches the 5s poll interval in useMarketData.ts.
+  const REFRESH_INTERVAL_S = 5;
+  const secondsSinceUpdate = predictionSuite.lastUpdated ? Math.floor((now - predictionSuite.lastUpdated) / 1000) : 0;
+  const secondsUntilRefresh = predictionSuite.lastUpdated
+    ? Math.max(0, REFRESH_INTERVAL_S - secondsSinceUpdate)
+    : REFRESH_INTERVAL_S;
+  // If we've gone well past the poll interval with no successful commit
+  // (e.g. the CORS proxies are down/rate-limited), say so plainly instead of
+  // silently sitting at "refresh in 0s" — that's what the underlying data
+  // pipeline uses to decide freshness too (see useMarketData.ts guards).
+  const STALE_THRESHOLD_S = 45;
+  const isDataStale = predictionSuite.lastUpdated > 0 && secondsSinceUpdate > STALE_THRESHOLD_S;
+
   return (
     <div className="container" style={{ paddingBottom: isMobile ? '2rem' : '5rem' }}>
       <header style={{
@@ -95,6 +123,47 @@ export const Dashboard = () => {
           </span>
         </div>
       </header>
+
+      {/* Today's Sentiment Snapshot — sticky so the verdict stays visible while scrolling */}
+      <div style={{
+        position: 'sticky',
+        top: 0,
+        zIndex: 40,
+        marginBottom: isMobile ? '1.25rem' : '2rem',
+        marginLeft: '-0.25rem',
+        marginRight: '-0.25rem',
+        padding: isMobile ? '0.75rem 0.25rem' : '0.85rem 0.25rem',
+        background: 'rgba(5, 7, 10, 0.85)',
+        backdropFilter: 'blur(14px)',
+        WebkitBackdropFilter: 'blur(14px)',
+        borderBottom: '1px solid rgba(148, 197, 210, 0.14)',
+        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.35)',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
+          <span className="text-secondary" style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+            Verdict
+          </span>
+          <span style={{
+            fontSize: '0.6rem',
+            color: isDataStale ? 'var(--danger)' : 'rgba(255,255,255,0.25)',
+            fontWeight: isDataStale ? 800 : 400,
+          }}>
+            {isDataStale ? `data stale (${secondsSinceUpdate}s)` : `refresh in ${secondsUntilRefresh}s`}
+          </span>
+        </div>
+        <div style={{
+          fontSize: isMobile ? '1.15rem' : '1.75rem',
+          fontWeight: 900,
+          letterSpacing: '0.01em',
+          lineHeight: 1.1,
+          color: consensus === 'BULLISH' ? 'var(--success)' : consensus === 'BEARISH' ? 'var(--danger)' : 'var(--warning)',
+        }}>
+          {todaySentimentWord}
+        </div>
+        <p style={{ margin: '0.2rem 0 0', fontSize: isMobile ? '0.7rem' : '0.8rem', color: 'var(--text-secondary)' }}>
+          {todaySentimentReason}
+        </p>
+      </div>
 
       {/* 1. Recommendations / AI Engines (Top Section) */}
       <section style={{ marginBottom: isMobile ? '1.5rem' : '3rem' }}>
@@ -514,92 +583,8 @@ export const Dashboard = () => {
         </div>
       </section>
 
-      {/* 2. Global Macro Indicators Widget (Real-time commodities & macro indices) */}
-      <section style={{ marginBottom: isMobile ? '1.5rem' : '3rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1rem', marginBottom: isMobile ? '0.75rem' : '1.5rem', paddingLeft: '0.25rem' }}>
-          <Activity size={isMobile ? 14 : 24} className="text-primary" />
-          <h2 style={{ fontSize: isMobile ? '0.75rem' : '1.5rem', fontWeight: 700, letterSpacing: '0.02em' }}>
-            GLOBAL MACRO INDICATORS (REAL-TIME)
-          </h2>
-        </div>
-
-        {indicators.loading ? (
-          <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Syncing global macro feeds...</span>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
-            gap: '1rem'
-          }}>
-            {[
-              { label: 'VIX Volatility', data: indicators.vix, color: indicators.vix && indicators.vix.price > 20 ? 'var(--danger)' : 'var(--success)' },
-              { label: '10Y Treasury Yield', data: indicators.yield10y, format: (v: number) => `${v.toFixed(3)}%` },
-              { label: 'US Dollar Index', data: indicators.dxy },
-              { label: 'Gold Spot', data: indicators.gold, format: (v: number) => `$${v.toLocaleString()}` },
-              { label: 'Bitcoin (BTC)', data: indicators.bitcoin, format: (v: number) => `$${v.toLocaleString()}` },
-              { label: 'WTI Crude Oil', data: indicators.oil, format: (v: number) => `$${v.toFixed(2)}` }
-            ].map((item, index) => {
-              const val = item.data;
-              if (!val) return null;
-              
-              const isPositive = val.change >= 0;
-              const formattedPrice = item.format ? item.format(val.price) : val.price.toFixed(2);
-              const formattedChange = `${isPositive ? '+' : ''}${val.changePercent.toFixed(2)}%`;
-
-              return (
-                <motion.div
-                  key={item.label}
-                  initial={{ opacity: 0, y: 15 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                  className="glass-card"
-                  style={{
-                    padding: '0.85rem 1rem',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    justifyContent: 'space-between',
-                    border: '1px solid rgba(255,255,255,0.03)',
-                    background: 'rgba(10, 12, 18, 0.3)'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', fontWeight: 800, textTransform: 'uppercase', opacity: 0.7 }}>
-                      {item.label}
-                    </span>
-                    {indicators.lastUpdated > 0 && (
-                      <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', fontWeight: 400 }}>
-                        {age(indicators.lastUpdated)}
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div style={{ marginTop: '0.4rem' }}>
-                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: item.color || '#fff' }}>
-                      {formattedPrice}
-                    </div>
-                    
-                    <span style={{
-                      fontSize: '0.65rem',
-                      fontWeight: 700,
-                      color: isPositive ? 'var(--success)' : 'var(--danger)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      marginTop: '0.1rem'
-                    }}>
-                      {isPositive ? <ArrowUpRight size={10} style={{ marginRight: '1px' }} /> : <ArrowDownRight size={10} style={{ marginRight: '1px' }} />}
-                      {formattedChange}
-                    </span>
-                  </div>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
-      </section>
-
-      {/* 3 & 4. Chart, News & Consensus Section */}
+      {/* 2. Chart, News & Consensus Section — moved up to sit right below the
+          Real-time Indicators box in section 1, ahead of Global Macro. */}
       <div className="dashboard-grid">
         
         {/* Market Catalyst Feed (Left Side) */}
@@ -668,6 +653,91 @@ export const Dashboard = () => {
           </motion.div>
         </div>
       </div>
+
+      {/* 3. Global Macro Indicators Widget (Real-time commodities & macro indices) */}
+      <section style={{ marginBottom: isMobile ? '1.5rem' : '3rem', marginTop: isMobile ? '1.5rem' : '3rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '0.5rem' : '1rem', marginBottom: isMobile ? '0.75rem' : '1.5rem', paddingLeft: '0.25rem' }}>
+          <Activity size={isMobile ? 14 : 24} className="text-primary" />
+          <h2 style={{ fontSize: isMobile ? '0.75rem' : '1.5rem', fontWeight: 700, letterSpacing: '0.02em' }}>
+            GLOBAL MACRO INDICATORS (REAL-TIME)
+          </h2>
+        </div>
+
+        {indicators.loading ? (
+          <div className="glass-card" style={{ padding: '1.5rem', textAlign: 'center' }}>
+            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>Syncing global macro feeds...</span>
+          </div>
+        ) : (
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: isMobile ? 'repeat(2, 1fr)' : 'repeat(6, 1fr)',
+            gap: '1rem'
+          }}>
+            {[
+              { label: 'VIX Volatility', data: indicators.vix, color: indicators.vix && indicators.vix.price > 20 ? 'var(--danger)' : 'var(--success)' },
+              { label: '10Y Treasury Yield', data: indicators.yield10y, format: (v: number) => `${v.toFixed(3)}%` },
+              { label: 'US Dollar Index', data: indicators.dxy },
+              { label: 'Gold Spot', data: indicators.gold, format: (v: number) => `$${v.toLocaleString()}` },
+              { label: 'Bitcoin (BTC)', data: indicators.bitcoin, format: (v: number) => `$${v.toLocaleString()}` },
+              { label: 'WTI Crude Oil', data: indicators.oil, format: (v: number) => `$${v.toFixed(2)}` }
+            ].map((item, index) => {
+              const val = item.data;
+              if (!val) return null;
+
+              const isPositive = val.change >= 0;
+              const formattedPrice = item.format ? item.format(val.price) : val.price.toFixed(2);
+              const formattedChange = `${isPositive ? '+' : ''}${val.changePercent.toFixed(2)}%`;
+
+              return (
+                <motion.div
+                  key={item.label}
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="glass-card"
+                  style={{
+                    padding: '0.85rem 1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                    border: '1px solid rgba(255,255,255,0.03)',
+                    background: 'rgba(10, 12, 18, 0.3)'
+                  }}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: '0.6rem', color: 'var(--text-secondary)', fontWeight: 800, textTransform: 'uppercase', opacity: 0.7 }}>
+                      {item.label}
+                    </span>
+                    {indicators.lastUpdated > 0 && (
+                      <span style={{ fontSize: '0.55rem', color: 'rgba(255,255,255,0.2)', fontWeight: 400 }}>
+                        {age(indicators.lastUpdated)}
+                      </span>
+                    )}
+                  </div>
+
+                  <div style={{ marginTop: '0.4rem' }}>
+                    <div style={{ fontSize: '1.1rem', fontWeight: 800, color: item.color || '#fff' }}>
+                      {formattedPrice}
+                    </div>
+
+                    <span style={{
+                      fontSize: '0.65rem',
+                      fontWeight: 700,
+                      color: isPositive ? 'var(--success)' : 'var(--danger)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      marginTop: '0.1rem'
+                    }}>
+                      {isPositive ? <ArrowUpRight size={10} style={{ marginRight: '1px' }} /> : <ArrowDownRight size={10} style={{ marginRight: '1px' }} />}
+                      {formattedChange}
+                    </span>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
+      </section>
 
       <footer style={{ marginTop: '3rem', textAlign: 'center', padding: '2rem', borderTop: '1px solid var(--border-color)' }}>
         <p className="text-secondary" style={{ fontSize: '0.8rem' }}>

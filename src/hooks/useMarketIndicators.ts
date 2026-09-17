@@ -20,9 +20,9 @@ export interface MarketIndicators {
   lastUpdated: number; // epoch ms
 }
 
+// corsproxy.io excluded — now 401s on every request without a paid API key.
 const PROXIES = [
   'https://api.cors.lol/?url=',
-  'https://corsproxy.io/?url=',
   'https://api.allorigins.win/raw?url=',
 ];
 let proxyIdx = 0;

@@ -27,9 +27,9 @@ export const useMarketNews = () => {
       // Changed query to focus on Catalysts
       const symbol = 'S%26P+500+Market+Catalyst';
       const url = `https://query2.finance.yahoo.com/v1/finance/search?q=${symbol}&newsCount=20`;
+      // corsproxy.io excluded — now 401s on every request without a paid API key.
       const PROXIES = [
         'https://api.cors.lol/?url=',
-        'https://corsproxy.io/?url=',
         'https://api.allorigins.win/raw?url=',
       ];
       let proxyIdx = 0;

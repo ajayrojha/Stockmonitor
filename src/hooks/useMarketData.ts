@@ -156,9 +156,11 @@ export const useMarketData = () => {
 
   // Sticky-proxy strategy: stay on the last working proxy, only rotate on failure.
   // This prevents different proxies with different cache ages from toggling the chart.
+  // corsproxy.io is deliberately excluded — it now 401s on every request
+  // without a paid API key (console.corsproxy.io), so it was permanently dead
+  // weight in the rotation rather than an occasional fallback.
   const PROXIES = [
     'https://api.cors.lol/?url=',
-    'https://corsproxy.io/?url=',
     'https://api.allorigins.win/raw?url=',
   ];
   const proxyIdx = useRef(0);
