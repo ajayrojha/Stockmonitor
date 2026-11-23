@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { fetchJsonViaProxy } from '../lib/proxyFetch';
 
 const BULLISH_WORDS = [
   'calls', 'call', 'bull', 'bullish', 'long', 'moon', 'mooning', 'ath',
@@ -39,15 +40,11 @@ export const useRedditSentiment = () => {
 
   const fetchSentiment = useCallback(async () => {
     try {
-      const proxy = 'https://api.cors.lol/?url=';
-      const [wsbRes, investingRes] = await Promise.all([
-        fetch(proxy + encodeURIComponent('https://www.reddit.com/r/wallstreetbets/hot.json?limit=50')),
-        fetch(proxy + encodeURIComponent('https://www.reddit.com/r/investing/hot.json?limit=25')),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const [wsbJson, investingJson] = await Promise.all<any>([
+        fetchJsonViaProxy('https://www.reddit.com/r/wallstreetbets/hot.json?limit=50'),
+        fetchJsonViaProxy('https://www.reddit.com/r/investing/hot.json?limit=25').catch(() => null),
       ]);
-
-      if (!wsbRes.ok) throw new Error('Reddit API error');
-      const wsbJson = await wsbRes.json();
-      const investingJson = await investingRes.json();
 
       const allPosts: { title: string; selftext: string; score: number }[] = [
         ...(wsbJson?.data?.children || []),

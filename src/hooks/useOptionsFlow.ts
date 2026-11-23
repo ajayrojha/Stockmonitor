@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { fetchJsonViaProxy } from '../lib/proxyFetch';
 
 export interface OptionsFlow {
   pcr: number | null;           // Put/Call Volume Ratio
@@ -9,13 +10,6 @@ export interface OptionsFlow {
   error: string | null;
 }
 
-// corsproxy.io excluded — now 401s on every request without a paid API key.
-const PROXIES = [
-  'https://api.cors.lol/?url=',
-  'https://api.allorigins.win/raw?url=',
-];
-let proxyIdx = 0;
-const getProxy = () => { const p = PROXIES[proxyIdx % PROXIES.length]; proxyIdx++; return p; };
 
 export const useOptionsFlow = (symbol = 'SPY') => {
   const [flow, setFlow] = useState<OptionsFlow>({
@@ -31,9 +25,8 @@ export const useOptionsFlow = (symbol = 'SPY') => {
     try {
       // Yahoo Finance public options endpoint (no auth required)
       const url = `https://query2.finance.yahoo.com/v7/finance/options/${symbol}`;
-      const res = await fetch(getProxy() + encodeURIComponent(url));
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json = await fetchJsonViaProxy<any>(url);
 
       const chain = json?.optionChain?.result?.[0]?.options?.[0];
       if (!chain) throw new Error('No options data');

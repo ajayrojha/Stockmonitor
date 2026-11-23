@@ -1,4 +1,4 @@
-import { useMarketData } from '../hooks/useMarketData';
+import { useMarketData, REST_POLL_STREAMING_MS, REST_POLL_FALLBACK_MS } from '../hooks/useMarketData';
 import { useMarketIndicators } from '../hooks/useMarketIndicators';
 import { PriceChart } from './PriceChart';
 import { Activity, BarChart3, Clock, Zap, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
@@ -7,7 +7,7 @@ import { NewsSection } from './NewsSection';
 import { useState, useEffect } from 'react';
 
 export const Dashboard = () => {
-  const { currentPrice, history, barHistory, signals, technicalDetails, predictionSuite } = useMarketData();
+  const { currentPrice, history, barHistory, signals, technicalDetails, predictionSuite, streamStatus, lastTickAt } = useMarketData();
   
   // Real market data sentiment hooks
   const indicators = useMarketIndicators();
@@ -22,9 +22,11 @@ export const Dashboard = () => {
   }, []);
   const age = (ts: number) => {
     if (!ts) return '';
-    const s = Math.floor((now - ts) / 1000);
+    const s = Math.max(0, Math.floor((now - ts) / 1000));
     if (s < 60) return `${s}s ago`;
-    return `${Math.floor(s / 60)}m ${s % 60}s ago`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ${s % 60}s ago`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m ago`;
+    return `${Math.floor(s / 86400)}d ago`;
   };
 
   // Compile real-data engines consensus. NOTE: `technicalDetails.type` and
@@ -73,9 +75,11 @@ export const Dashboard = () => {
   // Countdown to the next data refresh feeding the verdict above. Tied to
   // predictionSuite.lastUpdated (set each time useMarketData actually commits
   // a fresh poll) rather than a decorative fixed timer, so it reflects real
-  // refresh cadence — matches the 5s poll interval in useMarketData.ts.
-  const REFRESH_INTERVAL_S = 5;
-  const secondsSinceUpdate = predictionSuite.lastUpdated ? Math.floor((now - predictionSuite.lastUpdated) / 1000) : 0;
+  // refresh cadence — matches the poll interval in useMarketData.ts, which is
+  // slower while the WebSocket stream is delivering live prices.
+  const isStreaming = streamStatus === 'open' && lastTickAt > 0 && now - lastTickAt < 15000;
+  const REFRESH_INTERVAL_S = (isStreaming ? REST_POLL_STREAMING_MS : REST_POLL_FALLBACK_MS) / 1000;
+  const secondsSinceUpdate = predictionSuite.lastUpdated ? Math.max(0, Math.floor((now - predictionSuite.lastUpdated) / 1000)) : 0;
   const secondsUntilRefresh = predictionSuite.lastUpdated
     ? Math.max(0, REFRESH_INTERVAL_S - secondsSinceUpdate)
     : REFRESH_INTERVAL_S;
@@ -148,7 +152,11 @@ export const Dashboard = () => {
             color: isDataStale ? 'var(--danger)' : 'rgba(255,255,255,0.25)',
             fontWeight: isDataStale ? 800 : 400,
           }}>
-            {isDataStale ? `data stale (${secondsSinceUpdate}s)` : `refresh in ${secondsUntilRefresh}s`}
+            {isDataStale
+              ? `data from ${age(predictionSuite.lastUpdated)}`
+              : isStreaming
+                ? (predictionSuite.lastUpdated ? `● live · indicators in ${secondsUntilRefresh}s` : '● live · indicators loading…')
+                : (predictionSuite.lastUpdated ? `refresh in ${secondsUntilRefresh}s` : 'loading…')}
           </span>
         </div>
         <div style={{
@@ -610,8 +618,8 @@ export const Dashboard = () => {
               <div>
                 <p className="text-secondary" style={{ fontSize: '0.85rem', marginBottom: '0.25rem' }}>DATA REFRESH STATE</p>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <h2 style={{ fontSize: '1.75rem' }}>Real-Time</h2>
-                  <RefreshCw size={16} className="text-success spin-slow" />
+                  <h2 style={{ fontSize: '1.75rem' }}>{isStreaming ? 'Streaming' : 'Polling'}</h2>
+                  <RefreshCw size={16} className={isStreaming ? 'text-success spin-slow' : 'text-secondary'} />
                 </div>
               </div>
             </div>
@@ -741,7 +749,7 @@ export const Dashboard = () => {
 
       <footer style={{ marginTop: '3rem', textAlign: 'center', padding: '2rem', borderTop: '1px solid var(--border-color)' }}>
         <p className="text-secondary" style={{ fontSize: '0.8rem' }}>
-          Consensus compiled from 4 real live data structures. Powered directly by Yahoo Finance, Alternative.me F&G, and Reddit.
+          Consensus compiled from 4 real live data structures. Data from Yahoo Finance (live stream) and CNBC.
         </p>
       </footer>
     </div>

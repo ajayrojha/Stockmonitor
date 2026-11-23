@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { fetchJsonViaProxy } from '../lib/proxyFetch';
 
 export interface FearGreedData {
   value: number;
@@ -14,17 +15,6 @@ export interface FearGreedData {
   };
 }
 
-// corsproxy.io excluded — now 401s on every request without a paid API key.
-const PROXIES = [
-  'https://api.cors.lol/?url=',
-  'https://api.allorigins.win/raw?url=',
-];
-let proxyIdx = 0;
-const getProxy = () => {
-  const p = PROXIES[proxyIdx % PROXIES.length];
-  proxyIdx++;
-  return p;
-};
 
 const clamp = (v: number, min = 0, max = 100) => Math.max(min, Math.min(max, Math.round(v)));
 
@@ -40,9 +30,8 @@ const classify = (score: number): string => {
 const fetchQuote = async (ticker: string): Promise<{ price: number; changePct: number } | null> => {
   try {
     const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d`;
-    const res = await fetch(getProxy() + encodeURIComponent(url));
-    if (!res.ok) return null;
-    const json = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json = await fetchJsonViaProxy<any>(url);
     const meta = json?.chart?.result?.[0]?.meta;
     if (!meta?.regularMarketPrice) return null;
     const price: number = meta.regularMarketPrice;
@@ -137,9 +126,9 @@ export const useFearGreed = () => {
     // Only use when we have genuine volume data (not during pre-market)
     try {
       const url = 'https://query2.finance.yahoo.com/v7/finance/options/SPY';
-      const res = await fetch(getProxy() + encodeURIComponent(url));
-      if (res.ok) {
-        const json = await res.json();
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const json = await fetchJsonViaProxy<any>(url).catch(() => null);
+      if (json) {
         const chain = json?.optionChain?.result?.[0]?.options?.[0];
         const calls: { volume?: number }[] = chain?.calls ?? [];
         const puts: { volume?: number }[] = chain?.puts ?? [];

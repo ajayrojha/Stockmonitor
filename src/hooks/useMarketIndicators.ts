@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
+import { fetchJsonViaProxy } from '../lib/proxyFetch';
+import { fetchCnbcQuotes } from '../lib/cnbcQuotes';
 
 export interface IndicatorData {
   symbol: string;
@@ -20,20 +22,12 @@ export interface MarketIndicators {
   lastUpdated: number; // epoch ms
 }
 
-// corsproxy.io excluded — now 401s on every request without a paid API key.
-const PROXIES = [
-  'https://api.cors.lol/?url=',
-  'https://api.allorigins.win/raw?url=',
-];
-let proxyIdx = 0;
-const getProxy = () => { const p = PROXIES[proxyIdx % PROXIES.length]; proxyIdx++; return p; };
 
 const fetchYahoo = async (ticker: string, name: string): Promise<IndicatorData | null> => {
   const url = `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1m&range=1d`;
   try {
-    const res = await fetch(getProxy() + encodeURIComponent(url));
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const json = await res.json();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const json = await fetchJsonViaProxy<any>(url);
     const meta = json?.chart?.result?.[0]?.meta;
     if (!meta?.regularMarketPrice) throw new Error('No price');
     const change = meta.regularMarketPrice - (meta.previousClose || meta.regularMarketPrice);
@@ -41,6 +35,16 @@ const fetchYahoo = async (ticker: string, name: string): Promise<IndicatorData |
     return { symbol: ticker, name, price: meta.regularMarketPrice, change, changePercent: changePct };
   } catch { return null; }
 };
+
+// Order matches the destructuring in fetchAll.
+const SOURCES = [
+  { name: 'VIX', cnbc: '.VIX', yahoo: '^VIX' },
+  { name: '10Y Yield', cnbc: 'US10Y', yahoo: '^TNX' },
+  { name: 'DXY', cnbc: '.DXY', yahoo: 'DX-Y.NYB' },
+  { name: 'Gold', cnbc: '@GC.1', yahoo: 'GC=F' },
+  { name: 'Bitcoin', cnbc: 'BTC.CM=', yahoo: 'BTC-USD' },
+  { name: 'WTI Oil', cnbc: '@CL.1', yahoo: 'CL=F' },
+];
 
 export const useMarketIndicators = () => {
   const [indicators, setIndicators] = useState<MarketIndicators>({
@@ -56,14 +60,17 @@ export const useMarketIndicators = () => {
   });
 
   const fetchAll = useCallback(async () => {
-    const [vix, yield10y, dxy, gold, bitcoin, oil] = await Promise.all([
-      fetchYahoo('^VIX', 'VIX'),
-      fetchYahoo('^TNX', '10Y Yield'),
-      fetchYahoo('DX-Y.NYB', 'DXY'),
-      fetchYahoo('GC=F', 'Gold'),
-      fetchYahoo('BTC-USD', 'Bitcoin'),
-      fetchYahoo('CL=F', 'WTI Oil'),
-    ]);
+    // CNBC first: one direct request for all six, no proxy. Anything it
+    // doesn't return falls back to Yahoo through the CORS proxies.
+    const cnbc = await fetchCnbcQuotes(SOURCES.map(s => s.cnbc)).catch(err => {
+      console.warn('CNBC quotes unavailable, falling back to Yahoo:', err);
+      return {} as Awaited<ReturnType<typeof fetchCnbcQuotes>>;
+    });
+    const [vix, yield10y, dxy, gold, bitcoin, oil] = await Promise.all(SOURCES.map(src => {
+      const q = cnbc[src.cnbc];
+      if (q) return Promise.resolve<IndicatorData>({ symbol: src.yahoo, name: src.name, price: q.last, change: q.change, changePercent: q.changePercent });
+      return fetchYahoo(src.yahoo, src.name);
+    }));
 
     setIndicators(prev => {
       const newErrors: Record<string, string> = {};
