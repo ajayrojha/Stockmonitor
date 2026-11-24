@@ -1,7 +1,7 @@
 import { useMarketData, REST_POLL_STREAMING_MS, REST_POLL_FALLBACK_MS } from '../hooks/useMarketData';
 import { useMarketIndicators } from '../hooks/useMarketIndicators';
 import { PriceChart } from './PriceChart';
-import { Activity, BarChart3, Clock, Zap, ArrowUpRight, ArrowDownRight, RefreshCw } from 'lucide-react';
+import { Activity, BarChart3, Clock, Zap, ArrowUpRight, ArrowDownRight, RefreshCw, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { NewsSection } from './NewsSection';
 import { useState, useEffect } from 'react';
@@ -90,6 +90,16 @@ export const Dashboard = () => {
   const STALE_THRESHOLD_S = 45;
   const isDataStale = predictionSuite.lastUpdated > 0 && secondsSinceUpdate > STALE_THRESHOLD_S;
 
+  // Verdict banner presentation. "Unanimous" = every engine votes the same
+  // direction on fresh data — only then does the banner flash, so a stale or
+  // split verdict never looks urgent.
+  const hasVerdictData = predictionSuite.lastUpdated > 0;
+  const verdictColor = consensus === 'BULLISH' ? 'var(--success)' : consensus === 'BEARISH' ? 'var(--danger)' : 'var(--warning)';
+  const agreeCount = Math.max(callCount, putCount);
+  const isUnanimous = hasVerdictData && !isDataStale && consensus !== 'NEUTRAL' && agreeCount === allSignals.length;
+  const actionLabel = !hasVerdictData ? 'WAITING FOR DATA' : consensus === 'BULLISH' ? 'BUY CALL' : consensus === 'BEARISH' ? 'BUY PUT' : 'NO TRADE';
+  const VerdictIcon = consensus === 'BULLISH' ? TrendingUp : consensus === 'BEARISH' ? TrendingDown : Minus;
+
   return (
     <div className="container" style={{ paddingBottom: isMobile ? '2rem' : '5rem' }}>
       <header style={{
@@ -129,27 +139,33 @@ export const Dashboard = () => {
       </header>
 
       {/* Today's Sentiment Snapshot — sticky so the verdict stays visible while scrolling */}
-      <div style={{
-        position: 'sticky',
-        top: 0,
-        zIndex: 40,
-        marginBottom: isMobile ? '1.25rem' : '2rem',
-        marginLeft: '-0.25rem',
-        marginRight: '-0.25rem',
-        padding: isMobile ? '0.75rem 0.25rem' : '0.85rem 0.25rem',
-        background: 'rgba(5, 7, 10, 0.85)',
-        backdropFilter: 'blur(14px)',
-        WebkitBackdropFilter: 'blur(14px)',
-        borderBottom: '1px solid rgba(148, 197, 210, 0.14)',
-        boxShadow: '0 10px 30px rgba(0, 0, 0, 0.35)',
-      }}>
+      <div
+        className={isUnanimous ? (consensus === 'BULLISH' ? 'verdict-flash-bull' : 'verdict-flash-bear') : ''}
+        style={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 40,
+          marginBottom: isMobile ? '1.25rem' : '2rem',
+          marginLeft: '-0.25rem',
+          marginRight: '-0.25rem',
+          padding: isMobile ? '0.75rem 0.5rem' : '1rem 1rem',
+          background: !hasVerdictData || consensus === 'NEUTRAL'
+            ? 'rgba(5, 7, 10, 0.88)'
+            : consensus === 'BULLISH' ? 'rgba(6, 30, 22, 0.9)' : 'rgba(34, 8, 10, 0.9)',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
+          borderBottom: `2px solid ${hasVerdictData ? verdictColor : 'rgba(148, 197, 210, 0.14)'}`,
+          borderRadius: '0 0 12px 12px',
+          boxShadow: '0 10px 30px rgba(0, 0, 0, 0.35)',
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem' }}>
           <span className="text-secondary" style={{ fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
             Verdict
           </span>
           <span style={{
             fontSize: '0.6rem',
-            color: isDataStale ? 'var(--danger)' : 'rgba(255,255,255,0.25)',
+            color: isDataStale ? 'var(--danger)' : 'rgba(255,255,255,0.35)',
             fontWeight: isDataStale ? 800 : 400,
           }}>
             {isDataStale
@@ -159,18 +175,107 @@ export const Dashboard = () => {
                 : (predictionSuite.lastUpdated ? `refresh in ${secondsUntilRefresh}s` : 'loading…')}
           </span>
         </div>
+
         <div style={{
-          fontSize: isMobile ? '1.15rem' : '1.75rem',
-          fontWeight: 900,
-          letterSpacing: '0.01em',
-          lineHeight: 1.1,
-          color: consensus === 'BULLISH' ? 'var(--success)' : consensus === 'BEARISH' ? 'var(--danger)' : 'var(--warning)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: isMobile ? '0.5rem' : '1rem',
+          marginTop: '0.25rem',
         }}>
-          {todaySentimentWord}
+          {/* Direction word */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: isMobile ? '0.4rem' : '0.75rem',
+            color: hasVerdictData ? verdictColor : 'var(--text-secondary)',
+          }}>
+            <VerdictIcon size={isMobile ? 26 : 44} strokeWidth={3} />
+            <span style={{
+              fontSize: isMobile ? '1.75rem' : '3rem',
+              fontWeight: 900,
+              letterSpacing: '0.02em',
+              lineHeight: 1,
+              textTransform: 'uppercase',
+              // White while flashing — the pulsing red/green background
+              // already carries the colour and would drown same-hue text.
+              ...(isUnanimous ? { color: '#fff', textShadow: `0 0 18px ${consensus === 'BULLISH' ? 'rgba(16,185,129,0.9)' : 'rgba(239,68,68,0.9)'}` } : {}),
+            }}>
+              {hasVerdictData ? todaySentimentWord : '—'}
+            </span>
+          </div>
+
+          {/* Call / Put action */}
+          <div
+            className={isUnanimous ? 'verdict-pill-flash' : ''}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: isMobile ? '0.45rem 0.85rem' : '0.7rem 1.5rem',
+              borderRadius: '999px',
+              fontSize: isMobile ? '1rem' : '1.6rem',
+              fontWeight: 900,
+              letterSpacing: '0.06em',
+              lineHeight: 1,
+              whiteSpace: 'nowrap',
+              ...(hasVerdictData && consensus !== 'NEUTRAL'
+                ? {
+                    background: verdictColor,
+                    color: '#05070a',
+                    ['--pill-glow' as string]: consensus === 'BULLISH' ? 'rgba(16,185,129,0.85)' : 'rgba(239,68,68,0.85)',
+                  }
+                : {
+                    background: 'transparent',
+                    color: hasVerdictData ? 'var(--warning)' : 'var(--text-secondary)',
+                    border: `2px solid ${hasVerdictData ? 'var(--warning)' : 'rgba(148,163,184,0.4)'}`,
+                  }),
+            }}
+          >
+            {consensus === 'BULLISH' && hasVerdictData && <ArrowUpRight size={isMobile ? 18 : 28} strokeWidth={3} />}
+            {consensus === 'BEARISH' && hasVerdictData && <ArrowDownRight size={isMobile ? 18 : 28} strokeWidth={3} />}
+            {actionLabel}
+          </div>
         </div>
-        <p style={{ margin: '0.2rem 0 0', fontSize: isMobile ? '0.7rem' : '0.8rem', color: 'var(--text-secondary)' }}>
-          {todaySentimentReason}
-        </p>
+
+        {/* Engine vote meter */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginTop: isMobile ? '0.5rem' : '0.75rem', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '3px' }} aria-label={`${callCount} bullish, ${putCount} bearish of ${allSignals.length} engines`}>
+            {allSignals.map(sig => (
+              <span
+                key={sig.engine}
+                title={`${shortEngineLabel(sig.engine)}: ${sig.type === 'BUY_CALL' ? 'Bullish' : sig.type === 'BUY_PUT' ? 'Bearish' : 'Neutral'}`}
+                style={{
+                  width: isMobile ? 18 : 26,
+                  height: 6,
+                  borderRadius: 3,
+                  background: !hasVerdictData ? 'rgba(255,255,255,0.1)'
+                    : sig.type === 'BUY_CALL' ? 'var(--success)' : sig.type === 'BUY_PUT' ? 'var(--danger)' : 'rgba(148,163,184,0.35)',
+                }}
+              />
+            ))}
+          </div>
+          <span style={{
+            fontSize: isMobile ? '0.7rem' : '0.8rem',
+            fontWeight: isUnanimous ? 800 : 600,
+            color: isUnanimous ? verdictColor : 'var(--text-secondary)',
+            letterSpacing: isUnanimous ? '0.04em' : undefined,
+          }}>
+            {!hasVerdictData
+              ? 'Waiting for indicator data…'
+              : isUnanimous
+                ? `${agreeCount}/${allSignals.length} ENGINES AGREE · STRONG SIGNAL`
+                : consensus === 'NEUTRAL'
+                  ? `Split ${callCount}-${putCount} — no clear majority`
+                  : `${agreeCount}/${allSignals.length} engines agree`}
+          </span>
+        </div>
+        {hasVerdictData && (
+          <p style={{ margin: '0.3rem 0 0', fontSize: isMobile ? '0.65rem' : '0.75rem', color: 'var(--text-secondary)' }}>
+            {todaySentimentReason}
+          </p>
+        )}
       </div>
 
       {/* 1. Recommendations / AI Engines (Top Section) */}

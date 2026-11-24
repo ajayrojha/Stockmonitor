@@ -181,3 +181,28 @@ h1, h2, h3 {
   100% { opacity: 0.3; }
 }
 .pulse-bg { animation: pulse-bg 1.5s infinite ease-in-out; }
+
+/* ── Verdict banner: flashes only when every engine agrees on fresh data ──
+   1 Hz — well under the 3 flashes/second photosensitivity threshold. */
+@keyframes verdict-flash-bull {
+  0%, 100% { background-color: rgba(6, 30, 22, 0.9); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+  50%      { background-color: rgba(16, 120, 80, 0.75); box-shadow: 0 0 36px rgba(16, 185, 129, 0.55); }
+}
+@keyframes verdict-flash-bear {
+  0%, 100% { background-color: rgba(34, 8, 10, 0.9); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); }
+  50%      { background-color: rgba(140, 24, 24, 0.75); box-shadow: 0 0 36px rgba(239, 68, 68, 0.55); }
+}
+@keyframes verdict-pill-flash {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 var(--pill-glow); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 28px 6px var(--pill-glow); }
+}
+.verdict-flash-bull { animation: verdict-flash-bull 1s ease-in-out infinite; }
+.verdict-flash-bear { animation: verdict-flash-bear 1s ease-in-out infinite; }
+.verdict-pill-flash { animation: verdict-pill-flash 1s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .verdict-flash-bull, .verdict-flash-bear, .verdict-pill-flash { animation: none; }
+  .verdict-flash-bull { box-shadow: 0 0 36px rgba(16, 185, 129, 0.55); }
+  .verdict-flash-bear { box-shadow: 0 0 36px rgba(239, 68, 68, 0.55); }
+  .verdict-pill-flash { box-shadow: 0 0 28px 6px var(--pill-glow); }
+}
